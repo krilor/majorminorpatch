@@ -42,6 +42,7 @@ class MajorMinorPatch {
 	/* Singleton */
   protected static $instance;
   public $version;
+	public $meta_key;
 
 	/**
 	 * Main plugin class instance
@@ -67,8 +68,22 @@ class MajorMinorPatch {
 	public function __construct() {
 
     $this->version = '0.0.0';
+		$this->meta_key = 'majminpat-version';
 		$this->define_hooks();
 
+	}
+
+	/**
+	 * Add rewrite rules for the baseline and versions
+	 *
+	 * Valid URLs are with or without parent page slug, then only version, only baseline or both version and baseline in both ways
+	 * SITE_NAME/(page-parent-slug/)?page-slug/baseline/2017-03-04T23:00:00/version/0.1.0(/)?
+	 * SITE_NAME/(page-parent-slug/)?page-slug/version/0.1.0/baseline/2017-03-04T23:00:00(/)?
+	 * SITE_NAME/(page-parent-slug/)?page-slug/baseline/2017-03-04T23:00:00(/)?
+	 * SITE_NAME/(page-parent-slug/)?page-slug/version/0.1.0(/)?
+	 */
+	public function add_rewrite_rules(){
+		return;
 	}
 
   /**
@@ -79,7 +94,71 @@ class MajorMinorPatch {
 	 */
 	private function define_hooks() {
 
-    return;
+		// Shortcode to list revisions
+		add_shortcode( 'listrevisions', array( $this, 'list_revisions' ) );
+
+		// Add meta key to revisions
+		add_filter( 'wp_post_revision_meta_keys', array( $this, 'add_version_meta_key_to_revision' ) );
+		add_filter( 'wp_post_revision_single_meta_keys', array( $this, 'add_version_meta_key_to_revision' ) );
+
+	}
+
+	public function list_revisions() {
+		$postid = get_the_ID();
+		//$revs = wp_get_post_revisions($postid);
+		// https://developer.wordpress.org/reference/classes/wp_query/parse_query/
+		// https://johnblackbourn.com/post-meta-revisions-wordpress
+
+		$version = '2';
+		$revs = $this->get_page_version( $postid, $version );
+		var_dump($revs);
+		return 'Some random HTML';
+	}
+
+	/**
+	* Get the latest version of the page
+	*/
+	function get_page_version( $id, $version, $year = false, $month = false, $day = false ){
+		$args = array(
+			'posts_per_page' => 1,
+			'post_parent' => $id,
+			'post_type' => 'revision',
+			'post_status' => 'inherit',
+			'order' => 'DESC',
+			'orderby' => 'date ID',
+			'check_enabled' => true,
+			'meta_key' => $this->meta_key,
+			'meta_value' => $version,
+			/*'meta_query' => array(
+				'relation' => 'OR', // Optional, defaults to "AND"
+				array(
+					'key'     => $this->meta_key,
+					'value'   => $version,
+					'compare' => '='
+				)
+		)*/ );
+
+		if ( $year && $month && $day ) {
+			$args['date_query'] = array(
+															'after' => array(
+																	'year'  => $year,
+																	'month' => $month,
+																	'day'   => $day,
+															),
+														);
+		}
+
+		return get_posts( $args );
+	}
+
+	/**
+	 * Hooks into WP-Post-Meta-Revisions to add a special meta key that is needed for versioning
+	 *
+	 */
+
+	public function add_version_meta_key_to_revision( $keys ){
+		$keys[] = $this->meta_key;
+    return $keys;
 	}
 
 }
